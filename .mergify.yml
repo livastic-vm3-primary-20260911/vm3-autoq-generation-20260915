@@ -1,0 +1,8 @@
+pull_request_rules:
+  - name: vm3 head config provenance a1f7
+    conditions:
+      - title = VM3_HEAD_CONFIG_PROVENANCE_20260915_A1F7
+      - -draft
+    actions:
+      comment:
+        message: VM3_HEAD_CONFIG_PROVENANCE_CANARY_A1F7
