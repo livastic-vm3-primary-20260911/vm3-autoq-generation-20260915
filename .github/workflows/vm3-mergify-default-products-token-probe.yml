@@ -1,0 +1,76 @@
+name: VM3 Mergify repo token org defaults probe
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Compare GitHub and Mergify authorization without exposing token
+        env:
+          GH_REPO_TOKEN: ${{ github.token }}
+        run: |
+          set -u
+          owner='livastic-vm3-mergify-lab-0911'
+          mutated=0
+          restore() {
+            if [ "$mutated" = 1 ]; then
+              code=$(curl -sS -o /tmp/mg-restore.json -w '%{http_code}' -X PUT \
+                -H "Authorization: Bearer $GH_REPO_TOKEN" \
+                -H 'Accept: application/json' \
+                -H 'Content-Type: application/json' \
+                --data '{"products":[]}' \
+                "https://api.mergify.com/v1/default_products/$owner")
+              echo "mergify_restore_status=$code"
+            fi
+          }
+          trap restore EXIT INT TERM
+
+          gh_status=$(curl -sS -o /tmp/gh-org.json -w '%{http_code}' \
+            -H "Authorization: Bearer $GH_REPO_TOKEN" \
+            -H 'Accept: application/vnd.github+json' \
+            "https://api.github.com/orgs/$owner/actions/permissions")
+          mg_get_status=$(curl -sS -o /tmp/mg-get.json -w '%{http_code}' \
+            -H "Authorization: Bearer $GH_REPO_TOKEN" \
+            -H 'Accept: application/json' \
+            "https://api.mergify.com/v1/default_products/$owner")
+
+          echo "github_org_actions_permissions_status=$gh_status"
+          echo "mergify_default_products_get_status=$mg_get_status"
+          if [ "$mg_get_status" = 200 ]; then
+            printf 'mergify_default_products_get_body='; cat /tmp/mg-get.json; echo
+            mg_put_status=$(curl -sS -o /tmp/mg-put.json -w '%{http_code}' -X PUT \
+              -H "Authorization: Bearer $GH_REPO_TOKEN" \
+              -H 'Accept: application/json' \
+              -H 'Content-Type: application/json' \
+              --data '{"products":["ci_insights"]}' \
+              "https://api.mergify.com/v1/default_products/$owner")
+            echo "mergify_default_products_put_status=$mg_put_status"
+            if [ "$mg_put_status" = 204 ]; then
+              mutated=1
+              after_status=$(curl -sS -o /tmp/mg-after.json -w '%{http_code}' \
+                -H "Authorization: Bearer $GH_REPO_TOKEN" \
+                -H 'Accept: application/json' \
+                "https://api.mergify.com/v1/default_products/$owner")
+              echo "mergify_after_put_get_status=$after_status"
+              printf 'mergify_after_put_body='; cat /tmp/mg-after.json; echo
+              restore_status=$(curl -sS -o /tmp/mg-restore-now.json -w '%{http_code}' -X PUT \
+                -H "Authorization: Bearer $GH_REPO_TOKEN" \
+                -H 'Accept: application/json' \
+                -H 'Content-Type: application/json' \
+                --data '{"products":[]}' \
+                "https://api.mergify.com/v1/default_products/$owner")
+              echo "mergify_restore_now_status=$restore_status"
+              if [ "$restore_status" = 204 ]; then mutated=0; fi
+              final_status=$(curl -sS -o /tmp/mg-final.json -w '%{http_code}' \
+                -H "Authorization: Bearer $GH_REPO_TOKEN" \
+                -H 'Accept: application/json' \
+                "https://api.mergify.com/v1/default_products/$owner")
+              echo "mergify_final_get_status=$final_status"
+              printf 'mergify_final_body='; cat /tmp/mg-final.json; echo
+            fi
+          fi
