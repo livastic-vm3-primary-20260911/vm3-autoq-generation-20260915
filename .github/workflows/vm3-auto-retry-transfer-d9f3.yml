@@ -1,0 +1,21 @@
+name: VM3 Auto Retry Transfer D9F3
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  retry-probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail first attempt only
+        run: |
+          echo "run_attempt=$GITHUB_RUN_ATTEMPT"
+          if [ "$GITHUB_RUN_ATTEMPT" = "1" ]; then
+            echo "VM3_D9F3_EXPECTED_FIRST_ATTEMPT_FAILURE"
+            exit 1
+          fi
+          echo "VM3_D9F3_RETRY_SUCCESS"
+
